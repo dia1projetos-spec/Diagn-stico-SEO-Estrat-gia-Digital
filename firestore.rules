@@ -1,0 +1,148 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─────────────────────────────────────────
+    // FUNÇÕES AUXILIARES
+    // ─────────────────────────────────────────
+
+    // Verifica se o usuário está autenticado
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    // Pega os dados do usuário logado no Firestore
+    function userData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    // Verifica se é admin
+    function isAdmin() {
+      return isAuth() && userData().role == "admin";
+    }
+
+    // Verifica se é o próprio usuário
+    function isOwner(userId) {
+      return isAuth() && request.auth.uid == userId;
+    }
+
+    // Verifica se o cliente pertence a esse admin
+    function isMyClient(clientId) {
+      return isAuth() &&
+        get(/databases/$(database)/documents/users/$(clientId)).data.adminId == request.auth.uid;
+    }
+
+    // Verifica se o site pertence ao usuário (admin ou cliente)
+    function canAccessSite(siteData) {
+      return isAuth() && (
+        siteData.ownerId == request.auth.uid ||
+        siteData.clientId == request.auth.uid
+      );
+    }
+
+    // ─────────────────────────────────────────
+    // COLEÇÃO: users
+    // ─────────────────────────────────────────
+    match /users/{userId} {
+
+      // Leitura: próprio usuário ou admin que o criou
+      allow read: if isOwner(userId) ||
+        (isAdmin() && resource.data.adminId == request.auth.uid);
+
+      // Criação: só admin pode criar usuários (cadastrar clientes)
+      allow create: if isAdmin() &&
+        request.resource.data.role == "client" &&
+        request.resource.data.adminId == request.auth.uid;
+
+      // Atualização: próprio usuário atualiza seus dados básicos
+      // Admin pode atualizar dados do próprio cliente
+      allow update: if isOwner(userId) ||
+        (isAdmin() && resource.data.adminId == request.auth.uid);
+
+      // Deleção: só admin pode remover clientes dele
+      allow delete: if isAdmin() &&
+        resource.data.adminId == request.auth.uid;
+    }
+
+    // ─────────────────────────────────────────
+    // COLEÇÃO: sites
+    // ─────────────────────────────────────────
+    match /sites/{siteId} {
+
+      // Leitura: admin dono do site ou cliente vinculado
+      allow read: if isAuth() && canAccessSite(resource.data);
+
+      // Criação: só admin pode adicionar sites
+      allow create: if isAdmin() &&
+        request.resource.data.ownerId == request.auth.uid;
+
+      // Atualização: só o admin dono do site
+      allow update: if isAdmin() &&
+        resource.data.ownerId == request.auth.uid;
+
+      // Deleção: só o admin dono do site
+      allow delete: if isAdmin() &&
+        resource.data.ownerId == request.auth.uid;
+
+      // ───────────────────────────────────────
+      // SUBCOLEÇÃO: reports
+      // ───────────────────────────────────────
+      match /reports/{reportId} {
+
+        // Leitura: admin dono ou cliente vinculado ao site
+        allow read: if isAuth() &&
+          canAccessSite(get(/databases/$(database)/documents/sites/$(siteId)).data);
+
+        // Criação e atualização: só admin dono do site
+        allow create, update: if isAdmin() &&
+          get(/databases/$(database)/documents/sites/$(siteId)).data.ownerId == request.auth.uid;
+
+        allow delete: if isAdmin() &&
+          get(/databases/$(database)/documents/sites/$(siteId)).data.ownerId == request.auth.uid;
+      }
+
+      // ───────────────────────────────────────
+      // SUBCOLEÇÃO: rankings
+      // ───────────────────────────────────────
+      match /rankings/{date} {
+
+        allow read: if isAuth() &&
+          canAccessSite(get(/databases/$(database)/documents/sites/$(siteId)).data);
+
+        allow create, update: if isAdmin() &&
+          get(/databases/$(database)/documents/sites/$(siteId)).data.ownerId == request.auth.uid;
+
+        allow delete: if isAdmin() &&
+          get(/databases/$(database)/documents/sites/$(siteId)).data.ownerId == request.auth.uid;
+      }
+
+      // ───────────────────────────────────────
+      // SUBCOLEÇÃO: alerts
+      // ───────────────────────────────────────
+      match /alerts/{alertId} {
+
+        allow read: if isAuth() &&
+          canAccessSite(get(/databases/$(database)/documents/sites/$(siteId)).data);
+
+        // Cliente pode marcar alerta como lido
+        allow update: if isAuth() &&
+          canAccessSite(get(/databases/$(database)/documents/sites/$(siteId)).data) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(["read"]);
+
+        allow create: if isAdmin() &&
+          get(/databases/$(database)/documents/sites/$(siteId)).data.ownerId == request.auth.uid;
+
+        allow delete: if isAdmin() &&
+          get(/databases/$(database)/documents/sites/$(siteId)).data.ownerId == request.auth.uid;
+      }
+    }
+
+    // ─────────────────────────────────────────
+    // NEGAR TUDO O MAIS
+    // ─────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
