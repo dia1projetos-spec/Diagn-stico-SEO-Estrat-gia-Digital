@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SEOEstratégia — Clientes</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:32px;flex-wrap:wrap;gap:12px" class="fade-up">
+      <div class="page-header" style="margin-bottom:0">
+        <h1>Clientes</h1>
+        <p>Gerencie todos os seus clientes em um só lugar.</p>
+      </div>
+      <button class="btn btn-primary" id="btn-new">+ Novo Cliente</button>
+    </div>
+
+    <!-- Form -->
+    <div id="form-panel" class="card card-accent fade-up-2" style="display:none;max-width:560px;margin-bottom:28px">
+      <h3 style="font-size:16px;font-weight:700;margin-bottom:20px">Cadastrar Novo Cliente</h3>
+      <div class="input-group"><label>Nome / Empresa</label><input class="input" id="cl-name" placeholder="Ex: Zoe Veos" /></div>
+      <div class="input-group"><label>Email de Acesso</label><input class="input" type="email" id="cl-email" placeholder="cliente@email.com" /></div>
+      <div class="input-group"><label>Senha Inicial</label><input class="input" type="password" id="cl-pass" placeholder="Senha para o cliente acessar" /></div>
+      <div class="input-group"><label>URL do Site</label><input class="input" type="url" id="cl-url" placeholder="https://sitedeocliente.com.br" /></div>
+      <div style="display:flex;gap:10px;margin-top:4px">
+        <button class="btn btn-primary" id="btn-save" style="flex:1">Cadastrar Cliente</button>
+        <button class="btn btn-ghost" id="btn-cancel">Cancelar</button>
+      </div>
+    </div>
+
+    <!-- List -->
+    <div id="loading-state" style="text-align:center;padding:40px;color:var(--text-muted)">Carregando clientes...</div>
+    <div id="empty-state" class="empty" style="display:none">
+      <h3>Nenhum cliente ainda</h3>
+      <p>Clique em "+ Novo Cliente" para começar.</p>
+    </div>
+    <div class="client-grid" id="client-grid" style="display:none"></div>
+  </main>
+</div>
+<div id="toast"></div>
+<script type="module">
+  import { auth, db } from '../js/firebase-config.js';
+  import { onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+  import { collection, addDoc, getDocs, query, where, Timestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+  import { buildSidebar, toast } from '../js/utils.js';
+
+  let adminUser = null;
+
+  onAuthStateChanged(auth, async user => {
+    if (!user) { window.location.href = '../index.html'; return; }
+    adminUser = user;
+    document.getElementById('sidebar').innerHTML = buildSidebar('clientes.html');
+    document.getElementById('sidebar-email').textContent = user.email;
+    document.getElementById('btn-logout').onclick = () => signOut(auth).then(() => window.location.href = '../index.html');
+    await loadClients();
+  });
+
+  document.getElementById('btn-new').addEventListener('click', () => {
+    document.getElementById('form-panel').style.display = 'block';
+  });
+  document.getElementById('btn-cancel').addEventListener('click', () => {
+    document.getElementById('form-panel').style.display = 'none';
+    clearForm();
+  });
+
+  document.getElementById('btn-save').addEventListener('click', async () => {
+    const name  = document.getElementById('cl-name').value.trim();
+    const email = document.getElementById('cl-email').value.trim();
+    const pass  = document.getElementById('cl-pass').value;
+    const url   = document.getElementById('cl-url').value.trim();
+    if (!name || !email || !pass || !url) { toast('Preencha todos os campos', 'error'); return; }
+
+    const btn = document.getElementById('btn-save');
+    btn.disabled = true; btn.textContent = 'Cadastrando...';
+
+    // Save admin credentials to restore session after creating client
+    const adminEmail = adminUser.email;
+    const adminToken = await adminUser.getIdToken();
+
+    try {
+      // Create auth user for client
+      const cred = await createUserWithEmailAndPassword(auth, email, pass);
+      const clientUid = cred.user.uid;
+
+      // Save client doc
+      await addDoc(collection(db, 'users'), {
+        uid: clientUid, name, email, siteUrl: url,
+        role: 'client', adminId: adminUser.uid,
+        createdAt: Timestamp.now()
+      });
+
+      // Create site doc for client
+      await addDoc(collection(db, 'sites'), {
+        url, name, ownerId: adminUser.uid, clientId: clientUid,
+        searchConsoleConnected: false, createdAt: Timestamp.now()
+      });
+
+      toast(`Cliente ${name} cadastrado!`);
+      document.getElementById('form-panel').style.display = 'none';
+      clearForm();
+      await loadClients();
+    } catch(e) {
+      toast(e.message || 'Erro ao cadastrar', 'error');
+    } finally {
+      btn.disabled = false; btn.textContent = 'Cadastrar Cliente';
+    }
+  });
+
+  async function loadClients() {
+    try {
+      const q = query(collection(db, 'users'), where('adminId','==', adminUser.uid), where('role','==','client'));
+      const snap = await getDocs(q);
+      const clients = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderClients(clients);
+    } catch(e) {
+      document.getElementById('loading-state').style.display = 'none';
+      toast('Erro ao carregar clientes.', 'error');
+    }
+  }
+
+  function renderClients(clients) {
+    document.getElementById('loading-state').style.display = 'none';
+    if (!clients.length) {
+      document.getElementById('empty-state').style.display = 'block';
+      document.getElementById('client-grid').style.display = 'none';
+      return;
+    }
+    document.getElementById('empty-state').style.display = 'none';
+    document.getElementById('client-grid').style.display = 'grid';
+    document.getElementById('client-grid').innerHTML = clients.map(c => {
+      const date = c.createdAt?.toDate ? c.createdAt.toDate().toLocaleDateString('pt-BR') : '—';
+      return `
+        <div class="client-card">
+          <div class="client-header">
+            <div class="client-avatar">${c.name.charAt(0).toUpperCase()}</div>
+            <div>
+              <div class="client-name">${c.name}</div>
+              <div class="client-email">${c.email}</div>
+            </div>
+          </div>
+          <div class="client-site">
+            <div class="client-site-label">Site</div>
+            <a href="${c.siteUrl}" target="_blank">${c.siteUrl}</a>
+          </div>
+          <div class="client-date">Cadastrado em ${date}</div>
+        </div>`;
+    }).join('');
+  }
+
+  function clearForm() {
+    ['cl-name','cl-email','cl-pass','cl-url'].forEach(id => document.getElementById(id).value = '');
+  }
+</script>
+</body>
+</html>

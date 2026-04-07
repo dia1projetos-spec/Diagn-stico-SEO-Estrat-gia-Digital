@@ -1,86 +1,55 @@
 # SEOEstratégia 🚀
 
-Ferramenta de diagnóstico SEO inteligente com integração ao Google Search Console, análise por IA e painel multi-cliente.
+Ferramenta completa de diagnóstico SEO em HTML + CSS + JS puro.
+
+## Estrutura
+
+```
+seoestrategia/
+├── index.html              ← Login
+├── css/
+│   └── style.css           ← Todo o CSS
+├── js/
+│   ├── firebase-config.js  ← Suas credenciais Firebase
+│   └── utils.js            ← Funções compartilhadas
+└── pages/
+    ├── dashboard.html
+    ├── diagnostico.html
+    ├── search-console.html
+    ├── concorrentes.html
+    ├── ads.html
+    ├── conteudo.html
+    ├── monitoramento.html
+    ├── noticias.html
+    ├── relatorios.html
+    └── clientes.html
+```
+
+## Setup
+
+### 1. Configure o Firebase
+Abra `js/firebase-config.js` e cole suas credenciais do Firebase.
+
+### 2. Ative no Firebase Console
+- Authentication → Email/Senha → Ativar
+- Firestore Database → já criado em modo produção ✅
+- Cole as regras do `firestore.rules`
+
+### 3. Crie o primeiro usuário admin
+No Firebase Console → Authentication → Add User → crie seu email/senha de admin.
+
+### 4. Suba no GitHub e conecte na Vercel
+```bash
+git init
+git add .
+git commit -m "first commit"
+git remote add origin https://github.com/seu-usuario/seoestrategia.git
+git push -u origin main
+```
+Depois conecte o repositório na Vercel — deploy automático.
 
 ## Tecnologias
-
-- **Next.js 14** (App Router)
-- **Firebase** (Auth + Firestore)
-- **Cloudinary** (armazenamento de PDFs)
-- **Vercel** (deploy)
-
-## Como rodar localmente
-
-### 1. Clone o repositório
-```bash
-git clone https://github.com/seu-usuario/seoestrategia.git
-cd seoestrategia
-```
-
-### 2. Instale as dependências
-```bash
-npm install
-```
-
-### 3. Configure as variáveis de ambiente
-```bash
-cp .env.local.example .env.local
-```
-Preencha o `.env.local` com suas credenciais do Firebase, Google e Cloudinary.
-
-### 4. Rode o projeto
-```bash
-npm run dev
-```
-Acesse: http://localhost:3000
-
-## Estrutura do projeto
-
-```
-src/
-├── app/
-│   ├── page.tsx                  # Login
-│   ├── layout.tsx                # Layout global
-│   ├── globals.css               # Design system
-│   └── dashboard/
-│       ├── layout.tsx            # Sidebar + autenticação
-│       ├── page.tsx              # Visão geral
-│       ├── diagnostico/          # Diagnóstico SEO técnico
-│       ├── search-console/       # Integração Search Console
-│       ├── concorrentes/         # Análise de concorrentes
-│       ├── ads/                  # Recomendações de Ads
-│       ├── conteudo/             # Análise de conteúdo com IA
-│       ├── monitoramento/        # Histórico de rankings
-│       ├── noticias/             # Feed de notícias SEO
-│       ├── relatorios/           # Export PDF
-│       └── clientes/             # Painel admin multi-cliente
-├── components/                   # Componentes reutilizáveis
-├── lib/
-│   ├── firebase.ts               # Configuração Firebase
-│   └── db-structure.ts           # Documentação do banco
-└── hooks/                        # Custom hooks
-```
-
-## Funcionalidades
-
-- [x] Autenticação com Firebase
-- [x] Sidebar com navegação
-- [x] Design system dark mode
-- [ ] Diagnóstico SEO técnico
-- [ ] Integração Search Console
-- [ ] Feed de notícias SEO
-- [ ] Análise de concorrentes
-- [ ] Recomendações de Ads com IA
-- [ ] Análise de conteúdo com IA
-- [ ] Monitoramento de posição
-- [ ] Alertas por email
-- [ ] Export PDF
-- [ ] Sistema multi-cliente (SSO Firebase)
-- [ ] Painel admin master
-
-## Deploy
-
-```bash
-vercel --prod
-```
-Adicione as variáveis de ambiente no painel da Vercel antes do deploy.
+- HTML + CSS + JS puro (sem framework)
+- Firebase Authentication + Firestore
+- API Anthropic (claude-sonnet-4-20250514)
+- Hospedagem: GitHub + Vercel

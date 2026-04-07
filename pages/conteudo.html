@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SEOEstratégia — Análise de Conteúdo</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main">
+    <div class="page-header fade-up">
+      <h1>Análise de Conteúdo</h1>
+      <p>Cole seu texto e a IA avalia o SEO do conteúdo com sugestões de melhoria.</p>
+    </div>
+
+    <div class="fade-up-2">
+      <div class="input-group" style="max-width:400px">
+        <label>Palavra-chave Principal</label>
+        <input class="input" id="kw" placeholder="Ex: tênis masculino" />
+      </div>
+      <div class="input-group">
+        <label id="text-label">Conteúdo da Página</label>
+        <textarea class="input" id="content" rows="10" placeholder="Cole aqui o texto da sua página, artigo ou descrição de produto..."></textarea>
+      </div>
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px">
+        <span id="wc-info" style="font-size:13px;color:var(--text-muted)">0 palavras</span>
+        <span id="kw-info" style="font-size:13px;color:var(--text-muted)"></span>
+      </div>
+      <button class="btn btn-primary" id="btn-analyze">Analisar com IA</button>
+    </div>
+
+    <div id="result" style="display:none;margin-top:32px;max-width:800px">
+      <div class="ai-result">
+        <div class="ai-result-header"><div class="ai-dot"></div><h3>Análise de Conteúdo SEO</h3></div>
+        <p class="ai-text" id="ai-text"></p>
+      </div>
+    </div>
+  </main>
+</div>
+<div id="toast"></div>
+<script type="module">
+  import { auth } from '../js/firebase-config.js';
+  import { onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+  import { buildSidebar, setLoading, askAI, toast } from '../js/utils.js';
+
+  onAuthStateChanged(auth, user => {
+    if (!user) { window.location.href = '../index.html'; return; }
+    document.getElementById('sidebar').innerHTML = buildSidebar('conteudo.html');
+    document.getElementById('sidebar-email').textContent = user.email;
+    document.getElementById('btn-logout').onclick = () => signOut(auth).then(() => window.location.href = '../index.html');
+  });
+
+  const contentEl = document.getElementById('content');
+  const kwEl = document.getElementById('kw');
+  contentEl.addEventListener('input', updateStats);
+  kwEl.addEventListener('input', updateStats);
+
+  function updateStats() {
+    const text = contentEl.value;
+    const kw = kwEl.value.trim().toLowerCase();
+    const wc = text.split(/\s+/).filter(Boolean).length;
+    document.getElementById('wc-info').textContent = `${wc} palavras`;
+    if (kw) {
+      const count = (text.toLowerCase().match(new RegExp(kw, 'g')) || []).length;
+      document.getElementById('kw-info').textContent = `"${kw}" aparece ${count}x`;
+      document.getElementById('kw-info').style.color = count > 0 ? 'var(--accent)' : 'var(--text-muted)';
+    }
+  }
+
+  document.getElementById('btn-analyze').addEventListener('click', async () => {
+    const text = contentEl.value.trim();
+    const kw = kwEl.value.trim();
+    if (!text || !kw) { toast('Preencha a palavra-chave e o texto', 'error'); return; }
+
+    const btn = document.getElementById('btn-analyze');
+    setLoading(btn, true, 'Analisando...');
+    document.getElementById('result').style.display = 'none';
+
+    try {
+      const wc = text.split(/\s+/).filter(Boolean).length;
+      const kwCount = (text.toLowerCase().match(new RegExp(kw.toLowerCase(), 'g')) || []).length;
+      const density = wc > 0 ? ((kwCount/wc)*100).toFixed(2) : '0';
+
+      const ai = await askAI(`Você é especialista em SEO de conteúdo. Analise em português brasileiro.\n\nPalavra-chave alvo: ${kw}\nTotal de palavras: ${wc}\nOcorrências: ${kwCount} (densidade: ${density}%)\n\nTEXTO:\n${text.slice(0,3000)}\n\nResponda:\n1. AVALIAÇÃO GERAL (nota 0-10 e justificativa)\n2. USO DA PALAVRA-CHAVE: Está bem distribuída?\n3. ESTRUTURA: Início, meio e fim claros?\n4. LEGIBILIDADE: Parágrafos, subtítulos?\n5. 3 MELHORIAS ESPECÍFICAS com exemplos\n6. SUGESTÃO DE TÍTULO SEO otimizado para "${kw}"`);
+
+      document.getElementById('ai-text').textContent = ai;
+      document.getElementById('result').style.display = 'block';
+    } catch(e) {
+      toast('Erro ao analisar. Tente novamente.', 'error');
+    } finally {
+      setLoading(btn, false);
+    }
+  });
+</script>
+</body>
+</html>

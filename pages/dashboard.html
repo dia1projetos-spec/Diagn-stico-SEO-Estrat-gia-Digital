@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SEOEstratégia — Dashboard</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main">
+    <div class="page-header fade-up">
+      <h1>Visão Geral</h1>
+      <p>Bem-vindo ao SEOEstratégia. Selecione uma ferramenta para começar.</p>
+    </div>
+
+    <div class="card-grid fade-up-2">
+      <div class="stat-card" style="--card-color: var(--accent)">
+        <div class="stat-label">Score SEO</div>
+        <div class="stat-value" id="stat-score">—</div>
+        <div class="stat-sub">Faça um diagnóstico</div>
+      </div>
+      <div class="stat-card" style="--card-color: var(--info)">
+        <div class="stat-label">Cliques (30 dias)</div>
+        <div class="stat-value" id="stat-clicks">—</div>
+        <div class="stat-sub">Conecte o Search Console</div>
+      </div>
+      <div class="stat-card" style="--card-color: var(--warning)">
+        <div class="stat-label">Impressões</div>
+        <div class="stat-value" id="stat-impr">—</div>
+        <div class="stat-sub">Conecte o Search Console</div>
+      </div>
+      <div class="stat-card" style="--card-color: var(--success)">
+        <div class="stat-label">Posição Média</div>
+        <div class="stat-value" id="stat-pos">—</div>
+        <div class="stat-sub">Conecte o Search Console</div>
+      </div>
+    </div>
+
+    <h2 style="font-size:16px;font-weight:700;margin-bottom:16px" class="fade-up-3">Ações Rápidas</h2>
+    <div class="quick-actions fade-up-3">
+      <a class="quick-card" href="diagnostico.html">
+        <div>
+          <div class="quick-title">Diagnóstico SEO</div>
+          <div class="quick-desc">Analise seu site agora</div>
+        </div>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </a>
+      <a class="quick-card" href="search-console.html">
+        <div>
+          <div class="quick-title">Search Console</div>
+          <div class="quick-desc">Veja seus dados reais do Google</div>
+        </div>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--info)" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </a>
+      <a class="quick-card" href="concorrentes.html">
+        <div>
+          <div class="quick-title">Analisar Concorrente</div>
+          <div class="quick-desc">Descubra como superá-lo</div>
+        </div>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </a>
+      <a class="quick-card" href="ads.html">
+        <div>
+          <div class="quick-title">Recomendações Ads</div>
+          <div class="quick-desc">Vale a pena anunciar?</div>
+        </div>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </a>
+      <a class="quick-card" href="noticias.html">
+        <div>
+          <div class="quick-title">Notícias SEO</div>
+          <div class="quick-desc">Fique atualizado</div>
+        </div>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </a>
+      <a class="quick-card" href="relatorios.html">
+        <div>
+          <div class="quick-title">Gerar Relatório PDF</div>
+          <div class="quick-desc">Relatório profissional para clientes</div>
+        </div>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </a>
+    </div>
+  </main>
+</div>
+<div id="toast"></div>
+<script type="module">
+  import { auth } from '../js/firebase-config.js';
+  import { onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+  import { buildSidebar } from '../js/utils.js';
+
+  onAuthStateChanged(auth, user => {
+    if (!user) { window.location.href = '../index.html'; return; }
+    document.getElementById('sidebar').innerHTML = buildSidebar('dashboard.html');
+    document.getElementById('sidebar-email').textContent = user.email;
+    document.getElementById('btn-logout').onclick = () => signOut(auth).then(() => window.location.href = '../index.html');
+
+    // Load cached stats
+    const score = localStorage.getItem('seo_score');
+    if (score) document.getElementById('stat-score').textContent = score;
+    const sc = JSON.parse(localStorage.getItem('sc_summary') || 'null');
+    if (sc) {
+      document.getElementById('stat-clicks').textContent = Number(sc.clicks).toLocaleString('pt-BR');
+      document.getElementById('stat-impr').textContent = Number(sc.impressions).toLocaleString('pt-BR');
+      document.getElementById('stat-pos').textContent = Number(sc.position).toFixed(1);
+    }
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SEOEstratégia — Relatórios PDF</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main">
+    <div class="page-header fade-up">
+      <h1>Relatórios PDF</h1>
+      <p>Gere relatórios profissionais prontos para apresentar ao cliente.</p>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:start;max-width:900px" class="fade-up-2">
+      <div>
+        <div class="card" style="margin-bottom:16px">
+          <h3 style="font-size:16px;font-weight:700;margin-bottom:20px">Gerar Novo Relatório</h3>
+          <div class="input-group"><label>Nome do Site / Cliente</label><input class="input" id="site-name" placeholder="Ex: Loja da Maria" /></div>
+          <div class="input-group"><label>URL do Site</label><input class="input" type="url" id="site-url" placeholder="https://seusite.com.br" /></div>
+          <div class="input-group"><label>Nome do Responsável (opcional)</label><input class="input" id="responsible" placeholder="Ex: João Silva" /></div>
+          <button class="btn btn-primary btn-full" id="btn-generate">📄 Gerar Relatório PDF</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 style="font-size:15px;font-weight:700;margin-bottom:16px">O relatório inclui</h3>
+        ${['Resumo executivo com diagnóstico geral','Dados técnicos coletados da página','Pontos positivos identificados','Problemas críticos encontrados','Recomendações priorizadas por urgência','Próximos passos claros e acionáveis','Análise gerada por Inteligência Artificial'].map((item, i, arr) => `
+          <div style="display:flex;align-items:center;gap:10px;padding:9px 0;${i < arr.length-1 ? 'border-bottom:1px solid var(--border)' : ''}">
+            <span style="color:var(--accent);font-size:14px">✓</span>
+            <span style="font-size:14px;color:var(--text-secondary)">${item}</span>
+          </div>`).join('')}
+      </div>
+    </div>
+  </main>
+</div>
+<div id="toast"></div>
+<script type="module">
+  import { auth } from '../js/firebase-config.js';
+  import { onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+  import { buildSidebar, setLoading, fetchHTML, askAI, toast } from '../js/utils.js';
+
+  onAuthStateChanged(auth, user => {
+    if (!user) { window.location.href = '../index.html'; return; }
+    document.getElementById('sidebar').innerHTML = buildSidebar('relatorios.html');
+    document.getElementById('sidebar-email').textContent = user.email;
+    document.getElementById('btn-logout').onclick = () => signOut(auth).then(() => window.location.href = '../index.html');
+  });
+
+  document.getElementById('btn-generate').addEventListener('click', async () => {
+    const name = document.getElementById('site-name').value.trim();
+    const url  = document.getElementById('site-url').value.trim();
+    const resp = document.getElementById('responsible').value.trim();
+    if (!name || !url) { toast('Preencha o nome e a URL', 'error'); return; }
+
+    const btn = document.getElementById('btn-generate');
+    setLoading(btn, true, 'Analisando site...');
+
+    try {
+      const html = await fetchHTML(url);
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+
+      const title = doc.querySelector('title')?.textContent || 'N/A';
+      const desc = doc.querySelector('meta[name="description"]')?.getAttribute('content') || 'N/A';
+      const h1 = doc.querySelector('h1')?.textContent?.trim() || 'N/A';
+      const h2s = [...doc.querySelectorAll('h2')].slice(0,5).map(h => h.textContent?.trim()).join(', ') || 'Nenhum';
+      const imgs = doc.querySelectorAll('img').length;
+      const noAlt = [...doc.querySelectorAll('img')].filter(i => !i.getAttribute('alt')).length;
+      const hasCanon = !!doc.querySelector('link[rel="canonical"]');
+      const hasVp = !!doc.querySelector('meta[name="viewport"]');
+      const hasSchema = !!doc.querySelector('script[type="application/ld+json"]');
+      const hasOG = !!doc.querySelector('meta[property="og:title"]');
+      const https = url.startsWith('https');
+
+      btn.innerHTML = '<span class="spinner"></span> Gerando análise com IA...';
+      const ai = await askAI(`Gere um relatório SEO executivo para o site "${name}" (${url}) em português brasileiro. Adequado para apresentar a um cliente.\n\nDados:\n- Title: ${title}\n- Description: ${desc}\n- H1: ${h1}\n- H2s: ${h2s}\n- Imgs: ${imgs} total, ${noAlt} sem ALT\n- HTTPS: ${https}\n- Canonical: ${hasCanon}\n- Viewport: ${hasVp}\n- Schema: ${hasSchema}\n- OG: ${hasOG}\n\nEstruture assim:\n## Resumo Executivo\n## Pontos Positivos\n## Problemas Críticos\n## Recomendações Prioritárias (numeradas)\n## Próximos Passos`, 1400);
+
+      btn.innerHTML = '<span class="spinner"></span> Gerando PDF...';
+
+      const reportHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+      <style>
+        body{font-family:Arial,sans-serif;color:#1a1a2e;padding:48px;max-width:820px;margin:0 auto}
+        .header{border-bottom:4px solid #00e5a0;padding-bottom:24px;margin-bottom:32px}
+        .brand{font-size:22px;font-weight:bold;letter-spacing:-0.5px}
+        .brand span{color:#00e5a0}
+        h1{font-size:26px;margin:12px 0 4px;color:#0a0a0f}
+        .sub{color:#666;font-size:14px}.date{color:#999;font-size:13px;margin-top:6px}
+        h2{font-size:17px;color:#0a0a0f;margin-top:28px;border-left:4px solid #00e5a0;padding-left:12px}
+        p,li{line-height:1.75;color:#333;font-size:14px}
+        .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:20px 0}
+        .cell{background:#f5f5f5;padding:12px;border-radius:8px}
+        .cl{font-size:10px;color:#999;text-transform:uppercase;letter-spacing:.5px}
+        .cv{font-size:13px;color:#1a1a2e;font-weight:600;margin-top:3px}
+        .footer{margin-top:48px;padding-top:20px;border-top:1px solid #eee;text-align:center;color:#999;font-size:12px}
+        @media print{body{padding:24px}}
+      </style></head><body>
+      <div class="header">
+        <div class="brand">SEO<span>Estratégia</span></div>
+        <h1>Relatório SEO — ${name}</h1>
+        <div class="sub">${url}</div>
+        <div class="date">Gerado em ${new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'})}${resp ? ` • Responsável: ${resp}` : ''}</div>
+      </div>
+      <div class="grid">
+        <div class="cell"><div class="cl">Title</div><div class="cv">${title.slice(0,60)}</div></div>
+        <div class="cell"><div class="cl">H1</div><div class="cv">${h1.slice(0,60)}</div></div>
+        <div class="cell"><div class="cl">Imgs sem ALT</div><div class="cv">${noAlt} de ${imgs}</div></div>
+        <div class="cell"><div class="cl">HTTPS</div><div class="cv">${https ? '✅ Sim' : '❌ Não'}</div></div>
+        <div class="cell"><div class="cl">Schema Markup</div><div class="cv">${hasSchema ? '✅ Presente' : '❌ Ausente'}</div></div>
+        <div class="cell"><div class="cl">Responsivo</div><div class="cv">${hasVp ? '✅ Sim' : '❌ Não'}</div></div>
+      </div>
+      ${ai.replace(/## (.*)/g,'<h2>$1</h2>').replace(/\n\n/g,'<br><br>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n(\d+)\. /g,'<br><strong>$1.</strong> ')}
+      <div class="footer">Relatório gerado pelo SEOEstratégia • ${new Date().getFullYear()}</div>
+      </body></html>`;
+
+      const win = window.open('', '_blank');
+      if (win) { win.document.write(reportHtml); win.document.close(); win.onload = () => win.print(); }
+      toast('Relatório gerado! Salve como PDF.');
+    } catch(e) {
+      toast('Erro ao gerar relatório. Tente novamente.', 'error');
+    } finally {
+      setLoading(btn, false);
+    }
+  });
+</script>
+</body>
+</html>

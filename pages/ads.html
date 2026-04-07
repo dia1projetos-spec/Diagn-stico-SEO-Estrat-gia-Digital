@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SEOEstratégia — Recomendações Ads</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main">
+    <div class="page-header fade-up">
+      <h1>Recomendações de Ads</h1>
+      <p>A IA analisa seu produto e diz se vale investir em tráfego pago agora.</p>
+    </div>
+
+    <div style="max-width:640px" class="fade-up-2">
+      <div class="input-group"><label>Nome do Produto</label><input class="input" id="prod-name" placeholder="Ex: Tênis Nike Air Max" /></div>
+      <div class="input-group"><label>URL da Página do Produto</label><input class="input" type="url" id="prod-url" placeholder="https://seusite.com/produto" /></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="input-group"><label>Visitas (últimos 30 dias)</label><input class="input" type="number" id="prod-visits" placeholder="Ex: 150" /></div>
+        <div class="input-group"><label>Vendas (últimos 30 dias)</label><input class="input" type="number" id="prod-sales" placeholder="Ex: 3" /></div>
+      </div>
+      <button class="btn btn-primary" id="btn-analyze">Analisar Potencial de Ads</button>
+    </div>
+
+    <div id="result" style="display:none;margin-top:32px;max-width:760px">
+      <div class="ai-result">
+        <div class="ai-result-header"><div class="ai-dot"></div><h3 id="ai-header">Análise de Potencial</h3></div>
+        <p class="ai-text" id="ai-text"></p>
+      </div>
+    </div>
+  </main>
+</div>
+<div id="toast"></div>
+<script type="module">
+  import { auth } from '../js/firebase-config.js';
+  import { onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+  import { buildSidebar, setLoading, fetchHTML, askAI, toast } from '../js/utils.js';
+
+  onAuthStateChanged(auth, user => {
+    if (!user) { window.location.href = '../index.html'; return; }
+    document.getElementById('sidebar').innerHTML = buildSidebar('ads.html');
+    document.getElementById('sidebar-email').textContent = user.email;
+    document.getElementById('btn-logout').onclick = () => signOut(auth).then(() => window.location.href = '../index.html');
+  });
+
+  document.getElementById('btn-analyze').addEventListener('click', async () => {
+    const name = document.getElementById('prod-name').value.trim();
+    const url  = document.getElementById('prod-url').value.trim();
+    const visits = parseInt(document.getElementById('prod-visits').value) || 0;
+    const sales  = parseInt(document.getElementById('prod-sales').value) || 0;
+    if (!name || !url) { toast('Preencha o nome do produto e a URL', 'error'); return; }
+
+    const btn = document.getElementById('btn-analyze');
+    setLoading(btn, true, 'Analisando...');
+    document.getElementById('result').style.display = 'none';
+
+    try {
+      const html = await fetchHTML(url);
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+      const title = doc.querySelector('title')?.textContent || '';
+      const h1 = doc.querySelector('h1')?.textContent?.trim() || '';
+      const hasBtn = /comprar|carrinho|buy|checkout|adicionar/i.test(html);
+      const hasImgs = doc.querySelectorAll('img').length > 0;
+      const conv = visits > 0 ? ((sales/visits)*100).toFixed(1) : '0';
+
+      const ai = await askAI(`Você é especialista em Google Ads e conversão. Analise em português brasileiro.\n\nProduto: ${name}\nURL: ${url}\nVisitas/mês: ${visits}\nVendas/mês: ${sales}\nTaxa de conversão: ${conv}%\nTitle: ${title}\nH1: ${h1}\nBotão de compra: ${hasBtn ? 'Sim' : 'Não identificado'}\nImagens: ${hasImgs ? 'Sim' : 'Não'}\n\nResponda:\n1. VEREDICTO: Vale ou não vale Ads agora? Por quê?\n2. Se NÃO vale: O que corrigir antes\n3. Se VALE: 3 palavras-chave e tipo de campanha\n4. Estimativa de potencial de retorno`);
+
+      document.getElementById('ai-header').textContent = `Análise de Potencial — ${name}`;
+      document.getElementById('ai-text').textContent = ai;
+      document.getElementById('result').style.display = 'block';
+    } catch(e) {
+      toast('Erro ao analisar. Tente novamente.', 'error');
+    } finally {
+      setLoading(btn, false);
+    }
+  });
+</script>
+</body>
+</html>

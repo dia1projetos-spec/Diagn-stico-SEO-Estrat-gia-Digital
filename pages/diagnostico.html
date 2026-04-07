@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SEOEstratégia — Diagnóstico SEO</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main">
+    <div class="page-header fade-up">
+      <h1>Diagnóstico SEO</h1>
+      <p>Cole a URL do seu site e receba uma análise técnica completa com IA.</p>
+    </div>
+
+    <div style="display:flex;gap:12px;margin-bottom:32px;flex-wrap:wrap" class="fade-up-2">
+      <input class="input" type="url" id="input-url" placeholder="https://seusite.com.br" style="flex:1;min-width:260px" />
+      <button class="btn btn-primary" id="btn-analyze">Analisar</button>
+    </div>
+
+    <div id="results" style="display:none">
+      <!-- Score -->
+      <div class="card score-block" style="margin-bottom:24px">
+        <div>
+          <div class="score-number" id="score-num" style="color:var(--accent)">0</div>
+          <div style="font-size:14px;color:var(--text-secondary)">Score SEO</div>
+        </div>
+        <div>
+          <h2 style="font-size:18px;font-weight:700;margin-bottom:12px" id="score-label"></h2>
+          <div class="score-stats">
+            <div>
+              <span class="score-stat-val" id="cnt-err" style="color:var(--danger)">0</span>
+              <span class="score-stat-lbl">Erros</span>
+            </div>
+            <div>
+              <span class="score-stat-val" id="cnt-warn" style="color:var(--warning)">0</span>
+              <span class="score-stat-lbl">Avisos</span>
+            </div>
+            <div>
+              <span class="score-stat-val" id="cnt-ok" style="color:var(--success)">0</span>
+              <span class="score-stat-lbl">OK</span>
+            </div>
+          </div>
+          <!-- Checklist progress -->
+          <div style="margin-top:16px">
+            <div style="font-size:13px;color:var(--text-secondary);margin-bottom:6px" id="checklist-label"></div>
+            <div class="progress-wrap"><div class="progress-bar" id="progress-bar" style="width:0%"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI Analysis -->
+      <div class="ai-result" style="margin-bottom:24px">
+        <div class="ai-result-header">
+          <div class="ai-dot"></div>
+          <h3>Análise da IA</h3>
+        </div>
+        <p class="ai-text" id="ai-text">Gerando análise...</p>
+      </div>
+
+      <!-- Issues -->
+      <div class="card">
+        <h3 style="font-size:16px;font-weight:700;margin-bottom:20px">Itens Verificados</h3>
+        <div id="issues-list"></div>
+      </div>
+    </div>
+  </main>
+</div>
+<div id="toast"></div>
+
+<script type="module">
+  import { auth } from '../js/firebase-config.js';
+  import { onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+  import { buildSidebar, setLoading, fetchHTML, askAI, toast } from '../js/utils.js';
+
+  onAuthStateChanged(auth, user => {
+    if (!user) { window.location.href = '../index.html'; return; }
+    document.getElementById('sidebar').innerHTML = buildSidebar('diagnostico.html');
+    document.getElementById('sidebar-email').textContent = user.email;
+    document.getElementById('btn-logout').onclick = () => signOut(auth).then(() => window.location.href = '../index.html');
+  });
+
+  const btn = document.getElementById('btn-analyze');
+  btn.addEventListener('click', analyze);
+  document.getElementById('input-url').addEventListener('keydown', e => e.key === 'Enter' && analyze());
+
+  async function analyze() {
+    const url = document.getElementById('input-url').value.trim();
+    if (!url) { toast('Cole uma URL válida', 'error'); return; }
+
+    setLoading(btn, true, 'Buscando página...');
+    document.getElementById('results').style.display = 'none';
+
+    try {
+      const html = await fetchHTML(url);
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+      const issues = runChecks(doc, url);
+
+      const errs  = issues.filter(i => i.type === 'error').length;
+      const warns = issues.filter(i => i.type === 'warning').length;
+      const oks   = issues.filter(i => i.type === 'success').length;
+      const score = Math.round((oks / issues.length) * 100);
+
+      // Update UI
+      renderScore(score, errs, warns, oks);
+      renderIssues(issues);
+      document.getElementById('results').style.display = 'block';
+
+      // Save score for dashboard
+      localStorage.setItem('seo_score', score);
+
+      // AI
+      document.getElementById('ai-text').textContent = 'Gerando análise com IA...';
+      const summary = issues.map(i => `[${i.type.toUpperCase()}] ${i.cat}: ${i.msg}`).join('\n');
+      const ai = await askAI(`Você é especialista em SEO. Analise em português brasileiro os problemas do site ${url} (score ${score}/100). Seja direto e prático. Máximo 4 parágrafos curtos.\n\nProblemas:\n${summary}`);
+      document.getElementById('ai-text').textContent = ai;
+
+    } catch(e) {
+      toast('Erro ao analisar. Verifique a URL.', 'error');
+    } finally {
+      setLoading(btn, false);
+    }
+  }
+
+  function runChecks(doc, url) {
+    const issues = [];
+    const add = (type, cat, msg, fix = '') => issues.push({ type, cat, msg, fix });
+
+    // Title
+    const title = doc.querySelector('title')?.textContent || '';
+    if (!title) add('error', 'Title', 'Tag <title> ausente', 'Adicione um <title> com 50-60 caracteres.');
+    else if (title.length < 30) add('warning', 'Title', `Title curto (${title.length} chars): "${title}"`, 'Aumente para 50-60 caracteres com a palavra-chave principal.');
+    else if (title.length > 60) add('warning', 'Title', `Title longo (${title.length} chars)`, 'Reduza para no máximo 60 caracteres.');
+    else add('success', 'Title', `Title OK: "${title.slice(0,50)}"`, '');
+
+    // Meta description
+    const desc = doc.querySelector('meta[name="description"]')?.getAttribute('content') || '';
+    if (!desc) add('error', 'Meta Description', 'Meta description ausente', 'Adicione uma meta description com 120-160 caracteres.');
+    else if (desc.length < 80) add('warning', 'Meta Description', `Muito curta (${desc.length} chars)`, 'Aumente para 120-160 caracteres.');
+    else if (desc.length > 160) add('warning', 'Meta Description', `Muito longa (${desc.length} chars)`, 'Reduza para no máximo 160 caracteres.');
+    else add('success', 'Meta Description', `OK (${desc.length} chars)`, '');
+
+    // H1
+    const h1s = doc.querySelectorAll('h1');
+    if (!h1s.length) add('error', 'H1', 'Nenhum H1 encontrado', 'Adicione exatamente um H1 com a palavra-chave principal.');
+    else if (h1s.length > 1) add('warning', 'H1', `${h1s.length} H1s encontrados (ideal: 1)`, 'Mantenha apenas um H1 por página.');
+    else add('success', 'H1', `H1 OK: "${h1s[0].textContent?.trim().slice(0,50)}"`, '');
+
+    // H2
+    const h2s = doc.querySelectorAll('h2');
+    if (!h2s.length) add('warning', 'H2', 'Nenhum H2 encontrado', 'Use H2s para estruturar o conteúdo em seções.');
+    else add('success', 'H2', `${h2s.length} H2(s) encontrados`, '');
+
+    // Images ALT
+    const imgs = doc.querySelectorAll('img');
+    const noAlt = [...imgs].filter(i => !i.getAttribute('alt'));
+    if (noAlt.length) add('warning', 'Imagens', `${noAlt.length} imagem(ns) sem ALT`, 'Adicione texto alternativo em todas as imagens.');
+    else if (imgs.length) add('success', 'Imagens', `Todas as ${imgs.length} imagens têm ALT`, '');
+    else add('warning', 'Imagens', 'Nenhuma imagem encontrada', '');
+
+    // Canonical
+    if (!doc.querySelector('link[rel="canonical"]')) add('warning', 'Canonical', 'Tag canonical ausente', 'Adicione <link rel="canonical"> para evitar conteúdo duplicado.');
+    else add('success', 'Canonical', 'Canonical configurado', '');
+
+    // Open Graph
+    const og = ['og:title','og:description','og:image'].every(p => doc.querySelector(`meta[property="${p}"]`));
+    if (!og) add('warning', 'Open Graph', 'Tags Open Graph incompletas', 'Adicione og:title, og:description e og:image.');
+    else add('success', 'Open Graph', 'Open Graph completo', '');
+
+    // Viewport
+    if (!doc.querySelector('meta[name="viewport"]')) add('error', 'Mobile', 'Meta viewport ausente — site não responsivo', 'Adicione <meta name="viewport" content="width=device-width, initial-scale=1">.');
+    else add('success', 'Mobile', 'Viewport configurado', '');
+
+    // Schema
+    if (!doc.querySelector('script[type="application/ld+json"]')) add('warning', 'Schema', 'Schema.org ausente', 'Adicione Schema.org (JSON-LD) para rich snippets.');
+    else add('success', 'Schema', 'Schema.org encontrado', '');
+
+    // HTTPS
+    if (url.startsWith('http://')) add('error', 'HTTPS', 'Site sem SSL (HTTP)', 'Migre para HTTPS. É fator de ranqueamento do Google.');
+    else add('success', 'HTTPS', 'Site com SSL (HTTPS)', '');
+
+    return issues;
+  }
+
+  function renderScore(score, errs, warns, oks) {
+    const color = score >= 80 ? 'var(--success)' : score >= 50 ? 'var(--warning)' : 'var(--danger)';
+    const label = score >= 80 ? '✅ Bom trabalho!' : score >= 50 ? '⚠️ Precisa melhorar' : '🚨 Atenção necessária';
+    document.getElementById('score-num').textContent = score;
+    document.getElementById('score-num').style.color = color;
+    document.getElementById('score-label').textContent = label;
+    document.getElementById('cnt-err').textContent = errs;
+    document.getElementById('cnt-warn').textContent = warns;
+    document.getElementById('cnt-ok').textContent = oks;
+    document.getElementById('progress-bar').style.width = score + '%';
+    document.getElementById('checklist-label').textContent = `${oks} de ${errs + warns + oks} itens OK`;
+  }
+
+  function renderIssues(issues) {
+    const emojis = { error: '🔴', warning: '🟡', success: '🟢' };
+    document.getElementById('issues-list').innerHTML = issues.map(i => `
+      <div class="issue-item issue-${i.type}">
+        <div class="issue-icon">${emojis[i.type]}</div>
+        <div>
+          <span class="issue-cat issue-cat-${i.type}">${i.cat}</span>
+          <div class="issue-msg">${i.msg}</div>
+          ${i.fix ? `<div class="issue-fix">💡 ${i.fix}</div>` : ''}
+        </div>
+      </div>
+    `).join('');
+  }
+</script>
+</body>
+</html>

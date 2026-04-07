@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SEOEstratégia — Search Console</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main">
+    <div class="page-header fade-up">
+      <h1>Search Console</h1>
+      <p>Conecte sua conta e veja os dados reais do Google.</p>
+    </div>
+
+    <div id="connect-panel" class="fade-up-2">
+      <div class="card" style="max-width:560px">
+        <h2 style="font-size:18px;font-weight:700;margin-bottom:8px">Conectar Search Console</h2>
+        <p style="color:var(--text-secondary);font-size:13px;margin-bottom:24px;line-height:1.7">
+          Acesse o <a href="https://developers.google.com/oauthplayground" target="_blank" style="color:var(--accent)">OAuth 2.0 Playground</a>, autorize a API do Search Console (<code style="font-size:12px;background:var(--bg-elevated);padding:2px 6px;border-radius:4px">https://www.googleapis.com/auth/webmasters.readonly</code>) e cole o Access Token abaixo.
+        </p>
+        <div class="input-group">
+          <label>URL do Site (exatamente como no Search Console)</label>
+          <input class="input" type="text" id="sc-url" placeholder="https://seusite.com.br/" />
+        </div>
+        <div class="input-group">
+          <label>Access Token</label>
+          <input class="input" type="password" id="sc-token" placeholder="ya29.xxxxx..." />
+        </div>
+        <button class="btn btn-primary btn-full" id="btn-connect">Conectar e Buscar Dados</button>
+      </div>
+    </div>
+
+    <div id="data-panel" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+        <div class="pills" style="margin-bottom:0">
+          <button class="pill active" data-days="7">7 dias</button>
+          <button class="pill" data-days="28">28 dias</button>
+          <button class="pill" data-days="90">90 dias</button>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="btn-disconnect">Desconectar</button>
+      </div>
+
+      <div class="card-grid">
+        <div class="stat-card" style="--card-color:var(--accent)"><div class="stat-label">Cliques</div><div class="stat-value" id="s-clicks">—</div><div class="stat-sub" id="s-period">—</div></div>
+        <div class="stat-card" style="--card-color:var(--info)"><div class="stat-label">Impressões</div><div class="stat-value" id="s-impr">—</div><div class="stat-sub" id="s-period2">—</div></div>
+        <div class="stat-card" style="--card-color:var(--warning)"><div class="stat-label">CTR Médio</div><div class="stat-value" id="s-ctr">—</div><div class="stat-sub">taxa de cliques</div></div>
+        <div class="stat-card" style="--card-color:var(--success)"><div class="stat-label">Posição Média</div><div class="stat-value" id="s-pos">—</div><div class="stat-sub">no Google</div></div>
+      </div>
+
+      <div class="card" style="margin-bottom:20px">
+        <h3 style="font-size:16px;font-weight:700;margin-bottom:20px">Top Palavras-chave</h3>
+        <div class="table-wrap"><table><thead><tr><th>Palavra-chave</th><th>Cliques</th><th>Impressões</th><th>CTR</th><th>Posição</th></tr></thead><tbody id="kw-table"></tbody></table></div>
+      </div>
+
+      <div class="card">
+        <h3 style="font-size:16px;font-weight:700;margin-bottom:20px">Top Páginas</h3>
+        <div class="table-wrap"><table><thead><tr><th>Página</th><th>Cliques</th><th>Impressões</th><th>CTR</th><th>Posição</th></tr></thead><tbody id="pg-table"></tbody></table></div>
+      </div>
+    </div>
+  </main>
+</div>
+<div id="toast"></div>
+<script type="module">
+  import { auth } from '../js/firebase-config.js';
+  import { onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+  import { buildSidebar, setLoading, toast } from '../js/utils.js';
+
+  let scUrl = '', scToken = '', currentDays = 7;
+
+  onAuthStateChanged(auth, user => {
+    if (!user) { window.location.href = '../index.html'; return; }
+    document.getElementById('sidebar').innerHTML = buildSidebar('search-console.html');
+    document.getElementById('sidebar-email').textContent = user.email;
+    document.getElementById('btn-logout').onclick = () => signOut(auth).then(() => window.location.href = '../index.html');
+
+    // Restore saved session
+    const saved = JSON.parse(localStorage.getItem('sc_session') || 'null');
+    if (saved) { scUrl = saved.url; scToken = saved.token; showDataPanel(); fetchData(); }
+  });
+
+  document.getElementById('btn-connect').addEventListener('click', async () => {
+    scUrl = document.getElementById('sc-url').value.trim();
+    scToken = document.getElementById('sc-token').value.trim();
+    if (!scUrl || !scToken) { toast('Preencha a URL e o token', 'error'); return; }
+    localStorage.setItem('sc_session', JSON.stringify({ url: scUrl, token: scToken }));
+    showDataPanel();
+    await fetchData();
+  });
+
+  document.getElementById('btn-disconnect').addEventListener('click', () => {
+    localStorage.removeItem('sc_session');
+    document.getElementById('connect-panel').style.display = 'block';
+    document.getElementById('data-panel').style.display = 'none';
+  });
+
+  document.querySelectorAll('.pill[data-days]').forEach(pill => {
+    pill.addEventListener('click', () => {
+      document.querySelectorAll('.pill[data-days]').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      currentDays = parseInt(pill.dataset.days);
+      fetchData();
+    });
+  });
+
+  function showDataPanel() {
+    document.getElementById('connect-panel').style.display = 'none';
+    document.getElementById('data-panel').style.display = 'block';
+  }
+
+  async function fetchData() {
+    const end = new Date().toISOString().split('T')[0];
+    const start = new Date(Date.now() - currentDays * 86400000).toISOString().split('T')[0];
+    const headers = { Authorization: `Bearer ${scToken}`, 'Content-Type': 'application/json' };
+    const base = `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(scUrl)}/searchAnalytics/query`;
+
+    try {
+      const [kwRes, pgRes] = await Promise.all([
+        fetch(base, { method:'POST', headers, body: JSON.stringify({ startDate:start, endDate:end, dimensions:['query'], rowLimit:10 }) }),
+        fetch(base, { method:'POST', headers, body: JSON.stringify({ startDate:start, endDate:end, dimensions:['page'], rowLimit:10 }) })
+      ]);
+      const kwData = await kwRes.json();
+      const pgData = await pgRes.json();
+
+      const rows = kwData.rows || [];
+      const pgRows = pgData.rows || [];
+
+      const totClicks = rows.reduce((a, r) => a + r.clicks, 0);
+      const totImpr   = rows.reduce((a, r) => a + r.impressions, 0);
+      const avgPos    = rows.length ? rows.reduce((a,r) => a + r.position, 0) / rows.length : 0;
+      const avgCtr    = totImpr ? (totClicks / totImpr) * 100 : 0;
+
+      document.getElementById('s-clicks').textContent = totClicks.toLocaleString('pt-BR');
+      document.getElementById('s-impr').textContent = totImpr.toLocaleString('pt-BR');
+      document.getElementById('s-ctr').textContent = avgCtr.toFixed(1) + '%';
+      document.getElementById('s-pos').textContent = avgPos.toFixed(1);
+      document.getElementById('s-period').textContent = `últimos ${currentDays} dias`;
+      document.getElementById('s-period2').textContent = `últimos ${currentDays} dias`;
+
+      localStorage.setItem('sc_summary', JSON.stringify({ clicks: totClicks, impressions: totImpr, position: avgPos }));
+
+      document.getElementById('kw-table').innerHTML = rows.map(r => `
+        <tr>
+          <td style="font-weight:500">${r.keys[0]}</td>
+          <td style="color:var(--accent)">${r.clicks}</td>
+          <td style="color:var(--text-secondary)">${r.impressions.toLocaleString()}</td>
+          <td style="color:var(--warning)">${(r.ctr*100).toFixed(1)}%</td>
+          <td>${posBadge(r.position)}</td>
+        </tr>`).join('');
+
+      document.getElementById('pg-table').innerHTML = pgRows.map(r => `
+        <tr>
+          <td><a href="${r.keys[0]}" target="_blank" style="color:var(--accent);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block">${r.keys[0]}</a></td>
+          <td style="color:var(--accent)">${r.clicks}</td>
+          <td style="color:var(--text-secondary)">${r.impressions.toLocaleString()}</td>
+          <td style="color:var(--warning)">${(r.ctr*100).toFixed(1)}%</td>
+          <td>${posBadge(r.position)}</td>
+        </tr>`).join('');
+
+    } catch(e) {
+      toast('Erro ao buscar dados. Verifique o token.', 'error');
+    }
+  }
+
+  function posBadge(pos) {
+    const cls = pos <= 3 ? 'success' : pos <= 10 ? 'warning' : 'danger';
+    return `<span class="badge badge-${cls}">#${pos.toFixed(0)}</span>`;
+  }
+</script>
+</body>
+</html>

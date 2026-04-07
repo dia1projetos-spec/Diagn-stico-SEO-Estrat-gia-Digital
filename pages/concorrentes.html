@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SEOEstratégia — Concorrentes</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main">
+    <div class="page-header fade-up">
+      <h1>Análise de Concorrentes</h1>
+      <p>Cole a URL do concorrente e receba estratégias para superá-lo.</p>
+    </div>
+    <div style="max-width:620px" class="fade-up-2">
+      <div class="input-group"><label>URL do Concorrente</label><input class="input" type="url" id="comp-url" placeholder="https://concorrente.com.br" /></div>
+      <div class="input-group"><label>Meu Site (opcional — para comparação)</label><input class="input" type="url" id="my-url" placeholder="https://meusite.com.br" /></div>
+      <button class="btn btn-primary" id="btn-analyze">Analisar Concorrente</button>
+    </div>
+
+    <div id="results" style="display:none;margin-top:32px">
+      <div class="card" style="margin-bottom:20px">
+        <h3 style="font-size:16px;font-weight:700;margin-bottom:20px">Dados Técnicos do Concorrente</h3>
+        <div id="tech-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px"></div>
+      </div>
+      <div class="ai-result">
+        <div class="ai-result-header"><div class="ai-dot"></div><h3>Estratégias para Superar o Concorrente</h3></div>
+        <p class="ai-text" id="ai-text"></p>
+      </div>
+    </div>
+  </main>
+</div>
+<div id="toast"></div>
+<script type="module">
+  import { auth } from '../js/firebase-config.js';
+  import { onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+  import { buildSidebar, setLoading, fetchHTML, askAI, toast } from '../js/utils.js';
+
+  onAuthStateChanged(auth, user => {
+    if (!user) { window.location.href = '../index.html'; return; }
+    document.getElementById('sidebar').innerHTML = buildSidebar('concorrentes.html');
+    document.getElementById('sidebar-email').textContent = user.email;
+    document.getElementById('btn-logout').onclick = () => signOut(auth).then(() => window.location.href = '../index.html');
+  });
+
+  const btn = document.getElementById('btn-analyze');
+  btn.addEventListener('click', async () => {
+    const url = document.getElementById('comp-url').value.trim();
+    const myUrl = document.getElementById('my-url').value.trim();
+    if (!url) { toast('Cole a URL do concorrente', 'error'); return; }
+    setLoading(btn, true, 'Analisando concorrente...');
+    document.getElementById('results').style.display = 'none';
+
+    try {
+      const html = await fetchHTML(url);
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+
+      const title = doc.querySelector('title')?.textContent || 'Não encontrado';
+      const desc = doc.querySelector('meta[name="description"]')?.getAttribute('content') || 'Não encontrado';
+      const h1 = doc.querySelector('h1')?.textContent?.trim() || 'Não encontrado';
+      const h2s = [...doc.querySelectorAll('h2')].slice(0,5).map(h => h.textContent?.trim()).filter(Boolean).join(' • ') || 'Nenhum';
+      const hasSchema = !!doc.querySelector('script[type="application/ld+json"]');
+      const hasCanonical = !!doc.querySelector('link[rel="canonical"]');
+      const hasOG = !!doc.querySelector('meta[property="og:title"]');
+      const imgs = doc.querySelectorAll('img').length;
+
+      const fields = [
+        ['Title', title], ['Meta Description', desc], ['H1', h1], ['H2s', h2s],
+        ['Schema Markup', hasSchema ? '✅ Presente' : '❌ Ausente'],
+        ['Canonical', hasCanonical ? '✅ Presente' : '❌ Ausente'],
+        ['Open Graph', hasOG ? '✅ Presente' : '❌ Ausente'],
+        ['Imagens', `${imgs} encontradas`],
+      ];
+
+      document.getElementById('tech-grid').innerHTML = fields.map(([label, value]) => `
+        <div style="padding:14px;background:var(--bg-elevated);border-radius:9px">
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">${label}</div>
+          <div style="font-size:13px;color:var(--text-primary);line-height:1.5">${value}</div>
+        </div>`).join('');
+
+      document.getElementById('results').style.display = 'block';
+      document.getElementById('ai-text').textContent = 'Gerando estratégias...';
+
+      const ai = await askAI(`Você é especialista em SEO. Analise o concorrente ${url}${myUrl ? ` (meu site: ${myUrl})` : ''} e gere estratégias práticas para superá-lo em português.\n\nTitle: ${title}\nDesc: ${desc}\nH1: ${h1}\nH2s: ${h2s}\nSchema: ${hasSchema}\n\nEscreva:\n1. Pontos fracos do concorrente\n2. 3 estratégias de conteúdo\n3. 2 ações técnicas imediatas\n4. Oportunidade de palavra-chave que ele pode estar perdendo`);
+      document.getElementById('ai-text').textContent = ai;
+    } catch(e) {
+      toast('Erro ao analisar. Verifique a URL.', 'error');
+    } finally {
+      setLoading(btn, false);
+    }
+  });
+</script>
+</body>
+</html>

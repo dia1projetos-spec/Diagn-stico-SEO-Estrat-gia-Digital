@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SEOEstratégia — Login</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="login-page">
+    <div class="login-glow"></div>
+    <div class="login-box fade-up">
+      <div class="login-logo">
+        <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:12px">
+          <div class="logo-icon" style="width:40px;height:40px">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#080810" stroke-width="2.5">
+              <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>
+              <polyline points="16 7 22 7 22 13"/>
+            </svg>
+          </div>
+          <div class="logo-text" style="font-size:26px">SEO<span>Estratégia</span></div>
+        </div>
+        <p>Diagnóstico inteligente para o seu negócio</p>
+      </div>
+
+      <div class="card">
+        <h2 style="font-size:20px;font-weight:700;margin-bottom:24px">Entrar na plataforma</h2>
+
+        <div id="login-error" class="login-error" style="display:none"></div>
+
+        <div class="input-group">
+          <label>Email</label>
+          <input class="input" type="email" id="input-email" placeholder="seu@email.com" />
+        </div>
+
+        <div class="input-group">
+          <label>Senha</label>
+          <input class="input" type="password" id="input-password" placeholder="••••••••" />
+        </div>
+
+        <button class="btn btn-primary btn-full" id="btn-login" style="margin-top:8px">
+          Entrar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script type="module">
+    import { auth } from './js/firebase-config.js';
+    import {
+      signInWithEmailAndPassword,
+      onAuthStateChanged
+    } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+
+    // Redireciona se já estiver logado
+    onAuthStateChanged(auth, user => {
+      if (user) window.location.href = 'pages/dashboard.html';
+    });
+
+    const btn = document.getElementById('btn-login');
+    const emailEl = document.getElementById('input-email');
+    const passEl = document.getElementById('input-password');
+    const errEl = document.getElementById('login-error');
+
+    btn.addEventListener('click', async () => {
+      const email = emailEl.value.trim();
+      const pass = passEl.value;
+      if (!email || !pass) { showErr('Preencha email e senha.'); return; }
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Entrando...';
+      errEl.style.display = 'none';
+
+      try {
+        await signInWithEmailAndPassword(auth, email, pass);
+        window.location.href = 'pages/dashboard.html';
+      } catch (e) {
+        showErr('Email ou senha incorretos.');
+        btn.disabled = false;
+        btn.textContent = 'Entrar';
+      }
+    });
+
+    // Enter key
+    [emailEl, passEl].forEach(el => el.addEventListener('keydown', e => {
+      if (e.key === 'Enter') btn.click();
+    }));
+
+    function showErr(msg) {
+      errEl.textContent = msg;
+      errEl.style.display = 'block';
+    }
+  </script>
+</body>
+</html>

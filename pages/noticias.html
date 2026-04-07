@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SEOEstratégia — Notícias SEO</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main">
+    <div class="page-header fade-up">
+      <h1>Notícias SEO</h1>
+      <p>Últimas atualizações do mercado, direto das melhores fontes.</p>
+    </div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px" class="fade-up-2">
+      <div class="pills" style="margin-bottom:0" id="pills"></div>
+      <button class="btn btn-ghost btn-sm" id="btn-refresh">↻ Atualizar</button>
+    </div>
+
+    <div id="loading" style="text-align:center;padding:60px;color:var(--text-secondary)">
+      <p style="font-family:var(--font-display);font-size:18px;margin-bottom:8px">Buscando notícias...</p>
+      <p style="font-size:13px;color:var(--text-muted)">Consultando 4 fontes especializadas</p>
+    </div>
+    <div id="news-list" style="display:none"></div>
+  </main>
+</div>
+<div id="toast"></div>
+<script type="module">
+  import { auth } from '../js/firebase-config.js';
+  import { onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+  import { buildSidebar, fmtDate, toast } from '../js/utils.js';
+
+  const FEEDS = [
+    { name: 'Google Search Central', url: 'https://developers.google.com/search/blog/rss.xml', color: '#4285F4' },
+    { name: 'Search Engine Journal', url: 'https://www.searchenginejournal.com/feed/', color: '#FF6B35' },
+    { name: 'Search Engine Land', url: 'https://searchengineland.com/feed', color: '#00C49A' },
+    { name: 'Moz Blog', url: 'https://moz.com/blog/feed', color: '#5B4FE9' },
+  ];
+
+  let allNews = [], currentFilter = 'Todos';
+
+  onAuthStateChanged(auth, user => {
+    if (!user) { window.location.href = '../index.html'; return; }
+    document.getElementById('sidebar').innerHTML = buildSidebar('noticias.html');
+    document.getElementById('sidebar-email').textContent = user.email;
+    document.getElementById('btn-logout').onclick = () => signOut(auth).then(() => window.location.href = '../index.html');
+    buildPills();
+    fetchNews();
+  });
+
+  document.getElementById('btn-refresh').addEventListener('click', fetchNews);
+
+  function buildPills() {
+    const sources = ['Todos', ...FEEDS.map(f => f.name)];
+    document.getElementById('pills').innerHTML = sources.map(s => `<button class="pill ${s === 'Todos' ? 'active' : ''}" data-source="${s}">${s}</button>`).join('');
+    document.querySelectorAll('.pill[data-source]').forEach(p => p.addEventListener('click', () => {
+      document.querySelectorAll('.pill[data-source]').forEach(x => x.classList.remove('active'));
+      p.classList.add('active');
+      currentFilter = p.dataset.source;
+      renderNews();
+    }));
+  }
+
+  async function fetchNews() {
+    document.getElementById('loading').style.display = 'block';
+    document.getElementById('news-list').style.display = 'none';
+    allNews = [];
+
+    await Promise.allSettled(FEEDS.map(async feed => {
+      try {
+        const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(feed.url)}`);
+        const data = await res.json();
+        const xml = data.contents || '';
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(xml, 'text/xml');
+        [...doc.querySelectorAll('item')].slice(0, 6).forEach(item => {
+          allNews.push({
+            title: item.querySelector('title')?.textContent || '',
+            link: item.querySelector('link')?.textContent || '',
+            pubDate: item.querySelector('pubDate')?.textContent || '',
+            source: feed.name,
+            color: feed.color,
+          });
+        });
+      } catch(e) {}
+    }));
+
+    allNews.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('news-list').style.display = 'block';
+    renderNews();
+  }
+
+  function renderNews() {
+    const filtered = currentFilter === 'Todos' ? allNews : allNews.filter(n => n.source === currentFilter);
+    if (!filtered.length) {
+      document.getElementById('news-list').innerHTML = '<div class="empty"><p>Nenhuma notícia encontrada.</p></div>';
+      return;
+    }
+    document.getElementById('news-list').innerHTML = filtered.map(n => `
+      <a href="${n.link}" target="_blank" rel="noopener" style="text-decoration:none">
+        <div class="news-item" style="border-left:3px solid ${n.color}">
+          <div style="flex:1">
+            <div>
+              <span class="news-source" style="background:${n.color}22;color:${n.color}">${n.source}</span>
+              <span class="news-date">${fmtDate(n.pubDate)}</span>
+            </div>
+            <div class="news-title">${n.title}</div>
+          </div>
+          <div class="news-ext">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          </div>
+        </div>
+      </a>`).join('');
+  }
+</script>
+</body>
+</html>

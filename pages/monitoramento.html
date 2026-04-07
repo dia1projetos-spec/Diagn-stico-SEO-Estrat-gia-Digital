@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SEOEstratégia — Monitoramento</title>
+  <link rel="stylesheet" href="../css/style.css" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar"></aside>
+  <main class="main">
+    <div class="page-header fade-up">
+      <h1>Monitoramento de Posições</h1>
+      <p>Acompanhe a evolução do ranking das suas palavras-chave ao longo do tempo.</p>
+    </div>
+
+    <div class="card fade-up-2" style="max-width:600px;margin-bottom:24px">
+      <h3 style="font-size:15px;font-weight:700;margin-bottom:16px">Registrar Posição Hoje</h3>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <input class="input" id="kw-input" placeholder="Palavra-chave" style="flex:2;min-width:160px" />
+        <input class="input" type="number" id="pos-input" placeholder="Posição (ex: 7)" style="flex:1;min-width:100px" />
+        <button class="btn btn-primary" id="btn-add">+ Registrar</button>
+      </div>
+    </div>
+
+    <div id="summary-cards" class="card-grid" style="display:none"></div>
+
+    <div class="card fade-up-3">
+      <h3 style="font-size:16px;font-weight:700;margin-bottom:20px">Histórico de Posições</h3>
+      <div id="empty" class="empty" style="border:none;padding:40px 0">
+        <p style="color:var(--text-muted)">Nenhum registro ainda. Adicione sua primeira posição acima.</p>
+      </div>
+      <div class="table-wrap" id="table-wrap" style="display:none">
+        <table><thead><tr><th>Data</th><th>Palavra-chave</th><th>Posição</th></tr></thead>
+        <tbody id="rank-table"></tbody></table>
+      </div>
+    </div>
+  </main>
+</div>
+<div id="toast"></div>
+<script type="module">
+  import { auth, db } from '../js/firebase-config.js';
+  import { onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+  import { collection, addDoc, getDocs, orderBy, query, Timestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+  import { buildSidebar, toast } from '../js/utils.js';
+
+  let siteId = '';
+  let entries = [];
+  const colors = ['var(--accent)', 'var(--info)', 'var(--warning)', 'var(--danger)', '#a855f7'];
+
+  onAuthStateChanged(auth, async user => {
+    if (!user) { window.location.href = '../index.html'; return; }
+    siteId = user.uid;
+    document.getElementById('sidebar').innerHTML = buildSidebar('monitoramento.html');
+    document.getElementById('sidebar-email').textContent = user.email;
+    document.getElementById('btn-logout').onclick = () => signOut(auth).then(() => window.location.href = '../index.html');
+    await loadEntries();
+  });
+
+  document.getElementById('btn-add').addEventListener('click', async () => {
+    const kw = document.getElementById('kw-input').value.trim();
+    const pos = parseInt(document.getElementById('pos-input').value);
+    if (!kw || !pos) { toast('Preencha a palavra-chave e a posição', 'error'); return; }
+
+    try {
+      const entry = { keyword: kw, position: pos, date: new Date().toLocaleDateString('pt-BR'), createdAt: Timestamp.now() };
+      await addDoc(collection(db, 'sites', siteId, 'rankings'), entry);
+      entries.unshift(entry);
+      document.getElementById('kw-input').value = '';
+      document.getElementById('pos-input').value = '';
+      renderAll();
+      toast('Posição registrada!');
+    } catch(e) { toast('Erro ao salvar.', 'error'); }
+  });
+
+  async function loadEntries() {
+    try {
+      const q = query(collection(db, 'sites', siteId, 'rankings'), orderBy('createdAt', 'desc'));
+      const snap = await getDocs(q);
+      entries = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderAll();
+    } catch(e) { console.error(e); }
+  }
+
+  function renderAll() {
+    renderSummary();
+    renderTable();
+  }
+
+  function renderSummary() {
+    const byKw = {};
+    entries.forEach(e => { if (!byKw[e.keyword]) byKw[e.keyword] = []; byKw[e.keyword].push(e); });
+    const keys = Object.keys(byKw).slice(0, 5);
+    if (!keys.length) { document.getElementById('summary-cards').style.display = 'none'; return; }
+
+    document.getElementById('summary-cards').style.display = 'grid';
+    document.getElementById('summary-cards').innerHTML = keys.map((kw, i) => {
+      const data = byKw[kw];
+      const latest = data[0];
+      const prev = data[1];
+      const diff = prev ? prev.position - latest.position : 0;
+      const color = colors[i % colors.length];
+      return `
+        <div class="stat-card" style="--card-color:${color}">
+          <div class="stat-label" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${kw}</div>
+          <div style="display:flex;align-items:baseline;gap:10px">
+            <div class="stat-value">#${latest.position}</div>
+            ${diff !== 0 ? `<span style="font-size:14px;font-weight:700;color:${diff > 0 ? 'var(--success)' : 'var(--danger)'}">${diff > 0 ? '▲ +'+diff : '▼ '+diff}</span>` : ''}
+          </div>
+          <div class="stat-sub">Último: ${latest.date}</div>
+        </div>`;
+    }).join('');
+  }
+
+  function renderTable() {
+    if (!entries.length) {
+      document.getElementById('empty').style.display = 'block';
+      document.getElementById('table-wrap').style.display = 'none';
+      return;
+    }
+    document.getElementById('empty').style.display = 'none';
+    document.getElementById('table-wrap').style.display = 'block';
+    document.getElementById('rank-table').innerHTML = entries.map(e => {
+      const cls = e.position <= 3 ? 'success' : e.position <= 10 ? 'warning' : 'danger';
+      return `<tr><td style="color:var(--text-secondary);font-size:13px">${e.date}</td><td style="font-weight:500">${e.keyword}</td><td><span class="badge badge-${cls}">#${e.position}</span></td></tr>`;
+    }).join('');
+  }
+</script>
+</body>
+</html>
